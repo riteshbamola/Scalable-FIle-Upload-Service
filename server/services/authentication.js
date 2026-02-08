@@ -1,11 +1,11 @@
-const jwt = require('jsonwebtoken')
+import jwt from 'jsonwebtoken';   
+import crypto from 'crypto'
 
 const ACCESS_TOKEN_SECRET = "BAMOLI"
 const REFRESH_TOKEN_SECRET = "BAMOLI"
-export const genrateAccessToken =(user)=>{
+export const genrateAccessToken =(id)=>{
     const payload ={
-        sub: user._id.toString(),
-        role:user.role,
+        sub: id.toString(),
         type:'access'
     }
     const token= jwt.sign(payload,ACCESS_TOKEN_SECRET,{expiresIn:'1500ms'});
@@ -14,11 +14,12 @@ export const genrateAccessToken =(user)=>{
 
 export const generateRefreshToken = (user) =>{
     const jti= crypto.randomUUID();
+    console.log(jti);
     const payload= {
         sub:user._id.toString(),
         jti:jti,
         type:'refresh'
     }
-    return  jwt.sign(payload,REFRESH_TOKEN_SECRET, {expiresIn:'7d'});
-   
+    const token = jwt.sign(payload,REFRESH_TOKEN_SECRET, {expiresIn:'7d'});
+    return {token,jti};
 }

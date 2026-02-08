@@ -1,7 +1,13 @@
-const User = require('../Models/User');
-const RefreshToken= require('../Models/Refresh')
-const {generateRefreshToken,genrateAccessToken}= require('../services/authentication')
-const handleSignUp = async (req, res) => {
+import User from '../Models/User.js';
+import RefreshToken from '../Models/Refresh.js';
+import jwt from 'jsonwebtoken'
+import {
+  genrateAccessToken,
+  generateRefreshToken
+} from '../services/authentication.js';
+
+const REFRESH_TOKEN_SECRET = "BAMOLI"
+export const handleSignUp = async (req, res) => {
   try {
     const { name, email, password } = req.body;
 
@@ -14,8 +20,6 @@ const handleSignUp = async (req, res) => {
     if (existingUser) {
       return res.status(409).json({ message: 'Email already exists' });
     }
-
-    r
     const newUser = await User.create({
       name,
       email,
@@ -36,9 +40,9 @@ const handleSignUp = async (req, res) => {
   }
 };
 
-const handleSignIn = async (req, res) => {
+export const handleSignIn = async (req, res) => {
   try {
-    const { email, password } = req.body;
+    const {email, password } = req.body;
 
 
     if (!email || !password) {
@@ -58,8 +62,7 @@ const handleSignIn = async (req, res) => {
 
     
     const accessToken = genrateAccessToken(user);
-    const { refreshToken, jti } = generateRefreshToken(user);
-
+    const { token:refreshToken, jti } = generateRefreshToken(user);
    
     await RefreshToken.create({
       userId: user._id,
@@ -86,4 +89,67 @@ const handleSignIn = async (req, res) => {
   }
 };
 
-module.exports = { handleSignUp, handleSignIn };
+
+export const rotateToken = async (req, res) => {
+  try {
+    const refreshToken = req.cookies?.refreshToken;
+ 
+    if (!refreshToken) {
+      return res.status(401).json({ message: 'Refresh token missing' });
+    }
+
+    let payload;
+    try {
+      payload = jwt.verify(
+        refreshToken,
+        REFRESH_TOKEN_SECRET
+      );
+    } catch (err) {
+      return res.status(401).json({ message: 'Invalid refresh token' });
+    }
+
+    const storedToken = await RefreshToken.findOne({
+      userId: payload.sub,
+      jti: payload.jti,
+    });
+
+
+    if (!storedToken) {
+      await RefreshToken.deleteMany({ userId: payload.sub });
+      return res
+        .status(401)
+        .json({ message: 'Refresh token reuse detected' });
+    }
+
+    
+    const newAccessToken = genrateAccessToken({
+      _id: payload.sub,
+    });
+
+
+  
+    await RefreshToken.deleteOne({ _id: storedToken._id });
+
+    console.log("deleted refresh token")
+    const { token: newRefreshToken, jti } =
+      generateRefreshToken({ _id: payload.sub });
+
+    await RefreshToken.create({
+      userId: payload.sub,
+      jti,
+      expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+    });
+
+    res.cookie('refreshToken', newRefreshToken, {
+      httpOnly: true,
+      secure: false,
+      sameSite: 'strict',
+      maxAge: 7 * 24 * 60 * 60 * 1000,
+    });
+
+    return res.json({ accessToken: newAccessToken });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ message: 'Internal server error' });
+  }
+};
