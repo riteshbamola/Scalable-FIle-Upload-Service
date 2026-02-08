@@ -3,12 +3,12 @@ import crypto from 'crypto'
 
 const ACCESS_TOKEN_SECRET = "BAMOLI"
 const REFRESH_TOKEN_SECRET = "BAMOLI"
-export const genrateAccessToken =(id)=>{
+export const genrateAccessToken =(user)=>{
     const payload ={
-        sub: id.toString(),
+        sub: user._id.toString(),
         type:'access'
     }
-    const token= jwt.sign(payload,ACCESS_TOKEN_SECRET,{expiresIn:'1500ms'});
+    const token= jwt.sign(payload,ACCESS_TOKEN_SECRET,{expiresIn:'900000ms'});
     return token;
 }
 
