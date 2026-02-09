@@ -2,11 +2,10 @@ import User from '../Models/User.js';
 import RefreshToken from '../Models/Refresh.js';
 import jwt from 'jsonwebtoken'
 import {
-  genrateAccessToken,
+  generateAccessToken,
   generateRefreshToken
 } from '../services/authentication.js';
 
-const REFRESH_TOKEN_SECRET = "BAMOLI"
 export const handleSignUp = async (req, res) => {
   try {
     const { name, email, password } = req.body;
@@ -61,7 +60,7 @@ export const handleSignIn = async (req, res) => {
     }
 
     
-    const accessToken = genrateAccessToken(user);
+    const accessToken = generateAccessToken(user);
     const { token:refreshToken, jti } = generateRefreshToken(user);
    
     await RefreshToken.create({
@@ -102,7 +101,7 @@ export const rotateToken = async (req, res) => {
     try {
       payload = jwt.verify(
         refreshToken,
-        REFRESH_TOKEN_SECRET
+        process.env.REFRESH_TOKEN_SECRET
       );
     } catch (err) {
       return res.status(401).json({ message: 'Invalid refresh token' });
@@ -122,7 +121,7 @@ export const rotateToken = async (req, res) => {
     }
 
     
-    const newAccessToken = genrateAccessToken({
+    const newAccessToken = generateAccessToken({
       _id: payload.sub,
     });
 
