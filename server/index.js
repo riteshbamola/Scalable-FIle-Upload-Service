@@ -1,6 +1,7 @@
 import express from 'express';
 import connectDB from './db/db.js';
 import AuthRouter from './routes/Auth.js';
+import FileRouter from './routes/FIle.js'
 import cookieParser from 'cookie-parser';
 import dotenv from 'dotenv';
 dotenv.config();
@@ -13,6 +14,7 @@ app.use(cookieParser())
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+app.use('/file',FileRouter);
 app.use('/auth', AuthRouter);
 
 app.get('/', (req, res) => {

@@ -13,7 +13,7 @@ export const generateAccessToken =(user)=>{
 
 export const generateRefreshToken = (user) =>{
     const jti= crypto.randomUUID();
-    console.log(jti);
+    // console.log(jti);
     const payload= {
         sub:user._id.toString(),
         jti:jti,
