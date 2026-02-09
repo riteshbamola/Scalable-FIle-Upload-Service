@@ -1,9 +1,8 @@
 import mime from 'mime-types';
-import { PutObjectCommand } from "@aws-sdk/client-s3";
+import { PutObjectCommand, GetObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import s3 from '../config/s3.js';
-
-
+import File from '../Models/File.js'
 const ALLOWED_MIME_TYPES = [
   "image/jpeg",
   "image/png",
@@ -13,7 +12,6 @@ const ALLOWED_MIME_TYPES = [
 const MAX_FILE_SIZE = 5*1024*1024
 
 export const handleFileUpload = async (req,res)=>{
-    console.log("Hit");
     try{
         const userid= req.user;
         const {fileName,fileSize}= req.body;
@@ -38,7 +36,6 @@ export const handleFileUpload = async (req,res)=>{
         
         const extension = mime.extension(mimeType);
         const key = `uploads/${userid}/${Date.now()}.${extension}`;
-
         const command = new PutObjectCommand({
         Bucket: process.env.AWS_BUCKET_NAME,
         Key: key,
@@ -46,17 +43,64 @@ export const handleFileUpload = async (req,res)=>{
         });
 
         const uploadURL = await getSignedUrl(s3,command,{
-            expiresIn:360
+            expiresIn:60
         });
 
+        await File.create({
+            owner: userid,                 
+            originalName: fileName,       
+            mimeType,
+            size: fileSize,                
+
+            storage: {
+              provider: "s3",
+              bucket: process.env.AWS_BUCKET_NAME,
+              key: key
+            }
+        });
         res.status(200).json({
             uploadURL,
             key,
             mimeType
         });
-        
+                
     }catch(err){
         return res.status(500).json({message:err.message});
     }
     
 }
+
+export const handleFileRetrieval = async (req,res)=>{
+    try{
+        const userid= req.user;
+        const {fileID} = req.params;
+        
+
+        if(!fileID){
+            return res.status(400).json({message:"Missing FileId"});
+        }
+
+        const newfile = await File.findById(fileID);
+        if(!newfile){
+            return res.status(400).json({message:"No file found"});
+        }
+        const key= newfile.storage.key;
+        const command = new GetObjectCommand({
+        Bucket: process.env.AWS_BUCKET_NAME,
+        Key: key,
+        ResponseContentDisposition: "attachment"
+        });
+
+        const signedUrl = await getSignedUrl(s3,command,{
+            expiresIn:240
+        });
+
+        res.status(200).json({
+            signedUrl,
+        });
+                
+    }catch(err){
+        return res.status(500).json({message:err.message});
+    }
+}
+
