@@ -69,7 +69,6 @@ export const handleFileUpload = async (req,res)=>{
     }
     
 }
-
 export const handleFileRetrieval = async (req,res)=>{
     try{
         const userid= req.user;
@@ -104,3 +103,25 @@ export const handleFileRetrieval = async (req,res)=>{
     }
 }
 
+
+export const getAllFiles = async (req,res)=>{
+    try{
+        const id = req.user;
+
+        if(!id){
+            return res.status(400).json({message:"No User"});
+        }
+
+        const allFiles = await File.find({owner:id});
+        if(!allFiles){
+            return res.status(400).json({message:"No file found"});
+        }
+
+        // const fileNames = allFiles.map(file => file.originalName);
+        return res.status(200).json({
+            allFiles
+        })
+    } catch(err) {
+        return res.status(500).json({message:err.message});
+    }
+}
