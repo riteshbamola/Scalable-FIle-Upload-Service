@@ -1,5 +1,5 @@
 import mime from 'mime-types';
-import { PutObjectCommand, GetObjectCommand } from "@aws-sdk/client-s3";
+import { PutObjectCommand, GetObjectCommand, DeleteObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { HeadObjectCommand } from "@aws-sdk/client-s3";
 import s3 from '../config/s3.js';
@@ -61,9 +61,9 @@ export const handleFileUpload = async (req,res)=>{
             }
         });
 
-        //handled using a two-phase commit style 
+        // handled using a two-phase commit style 
         // approach where metadata is created in a pending state and 
-        //finalized only after verifying the object exists in S3.
+        // finalized only after verifying the object exists in S3.
 
 
         res.status(200).json({
@@ -139,7 +139,7 @@ export const getAllFiles = async (req,res)=>{
 export const confirmUpload = async (req, res) => {
   const { fileId } = req.body;
   const userId = req.user;
-  
+
   const file = await File.findOne({
     _id: fileId,
     owner: userId,
@@ -169,3 +169,49 @@ export const confirmUpload = async (req, res) => {
     });
   }
 };
+
+export const fileDelete = async (req,res)=>{
+    try{
+        const {fileId} = req.params;
+        const userId= req.user;
+
+          const file = await File.findOne({
+            _id: fileId,
+            owner: userId
+         });
+     
+         if (!file) {
+           return res.status(404).json({ message: "File not found" });
+         }
+         try {
+           await s3.send(
+             new HeadObjectCommand({
+               Bucket: file.storage.bucket,
+               Key: file.storage.key
+             })
+           );
+       
+           await s3.send(
+             new DeleteObjectCommand({
+               Bucket: file.storage.bucket,
+               Key: file.storage.key
+             })
+           );
+       
+          
+           await File.deleteOne({ _id: fileId });
+       
+           return res.json({ message: "File deleted successfully" });
+       
+         } catch (err) {
+           return res.status(500).json({
+             message: "Failed to delete file"
+           });
+       
+        }
+    }catch(err){
+        return res.status(500).json({message:err.message});
+    }
+    
+
+}
