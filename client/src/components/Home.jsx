@@ -1,44 +1,55 @@
-import React, { useState, useMemo, useRef } from "react";
+import React, { useState, useMemo, useRef, useEffect } from "react";
 import styles from "./Dashboard.module.css";
-
-/* ── Mock data ── */
-const MOCK_FILES = [
-  { id: 1, name: "report-q4-2025.pdf", type: "PDF", size: "2.4 MB", uploadDate: "2025-12-15" },
-  { id: 2, name: "profile-photo.png", type: "PNG", size: "1.1 MB", uploadDate: "2025-11-30" },
-  { id: 3, name: "budget-sheet.xlsx", type: "XLSX", size: "340 KB", uploadDate: "2025-11-22" },
-  { id: 4, name: "presentation.pptx", type: "PPTX", size: "5.7 MB", uploadDate: "2025-10-08" },
-  { id: 5, name: "notes.txt", type: "TXT", size: "12 KB", uploadDate: "2025-09-19" },
-  { id: 6, name: "design-mockup.fig", type: "FIG", size: "8.3 MB", uploadDate: "2025-09-01" },
-  { id: 7, name: "invoice-sep.pdf", type: "PDF", size: "430 KB", uploadDate: "2025-08-25" },
-  { id: 8, name: "team-photo.jpg", type: "JPG", size: "3.2 MB", uploadDate: "2025-08-10" },
-  { id: 9, name: "api-docs.md", type: "MD", size: "78 KB", uploadDate: "2025-07-14" },
-  { id: 10, name: "backup.zip", type: "ZIP", size: "14.6 MB", uploadDate: "2025-07-01" },
-  { id: 11, name: "logo-dark.svg", type: "SVG", size: "24 KB", uploadDate: "2025-06-20" },
-  { id: 12, name: "contract-draft.docx", type: "DOCX", size: "890 KB", uploadDate: "2025-06-05" },
-  { id: 13, name: "analytics-data.csv", type: "CSV", size: "1.8 MB", uploadDate: "2025-05-18" },
-];
+import api from "../api/axios";
 
 const FILES_PER_PAGE = 6;
 
 export default function Dashboard() {
-  const [files, setFiles] = useState(MOCK_FILES);
+  const [files, setFiles] = useState([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const fileInputRef = useRef(null);
 
-  /* ── Filtered files ── */
+  const handleGetFiles = async () => {
+    try {
+      const res = await api.get("/file/allfiles");
+
+      const normalizedFiles = (res.data.allFiles || []).map((file) => ({
+        id: file._id,
+        name: file.originalName,
+        type: file.mimeType.split("/")[1]?.toUpperCase() || "FILE",
+        size: formatBytes(file.size),
+        uploadDate: file.createdAt.split("T")[0],
+        storage: file.storage,
+      }));
+
+      setFiles(normalizedFiles);
+    } catch (err) {
+      console.error(err);
+      setFiles([]);
+    }
+  };
+
+  useEffect(() => {
+    handleGetFiles();
+  }, []);
+
   const filteredFiles = useMemo(() => {
     if (!searchQuery.trim()) return files;
+
     const q = searchQuery.toLowerCase();
     return files.filter((f) => f.name.toLowerCase().includes(q));
   }, [files, searchQuery]);
 
   /* ── Pagination ── */
-  const totalPages = Math.max(1, Math.ceil(filteredFiles.length / FILES_PER_PAGE));
+  const totalPages = Math.max(
+    1,
+    Math.ceil(filteredFiles.length / FILES_PER_PAGE),
+  );
   const safePage = Math.min(currentPage, totalPages);
   const paginatedFiles = filteredFiles.slice(
     (safePage - 1) * FILES_PER_PAGE,
-    safePage * FILES_PER_PAGE
+    safePage * FILES_PER_PAGE,
   );
 
   /* ── Handlers ── */
@@ -136,7 +147,9 @@ export default function Dashboard() {
         </div>
       ) : (
         <div className={styles.emptyState}>
-          {searchQuery ? "No files match your search." : "No files uploaded yet."}
+          {searchQuery
+            ? "No files match your search."
+            : "No files uploaded yet."}
         </div>
       )}
 
