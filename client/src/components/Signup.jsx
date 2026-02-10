@@ -3,11 +3,31 @@ import Image from "../assets/image.png";
 import Logo from "../assets/logo.png";
 import { FaEye, FaEyeSlash } from "react-icons/fa6";
 import { Link } from "react-router-dom";
-
+import api from "../api/axios";
+import { useNavigate } from "react-router-dom";
 
 const Signup = () => {
+  const navigate = useNavigate();
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [formData, setFormData] = useState({
+    name: "",
+    email: "",
+    password: "",
+  });
+
+  const handleSignUp = async () => {
+    try {
+      console.log(formData);
+      const response = await api.post("/auth/signup", formData);
+      if (response.status == 201) {
+        navigate("/login");
+      }
+      console.log(response.data);
+    } catch (error) {
+      console.error(error);
+    }
+  };
 
   return (
     <div className="login-main">
@@ -26,13 +46,40 @@ const Signup = () => {
             <p>Please enter your details</p>
 
             <form>
-              <input type="text" placeholder="Full Name" />
-              <input type="email" placeholder="Email" />
+              <input
+                type="text"
+                placeholder="Full Name"
+                name="FullName"
+                onChange={(e) => {
+                  setFormData({
+                    ...formData,
+                    name: e.target.value,
+                  });
+                }}
+              />
+              <input
+                type="email"
+                placeholder="Email"
+                name="Email"
+                onChange={(e) => {
+                  setFormData({
+                    ...formData,
+                    email: e.target.value,
+                  });
+                }}
+              />
 
               <div className="pass-input-div">
                 <input
                   type={showPassword ? "text" : "password"}
                   placeholder="Password"
+                  name="Password"
+                  onChange={(e) => {
+                    setFormData({
+                      ...formData,
+                      password: e.target.value,
+                    });
+                  }}
                 />
                 {showPassword ? (
                   <FaEyeSlash onClick={() => setShowPassword(!showPassword)} />
@@ -48,29 +95,26 @@ const Signup = () => {
                 />
                 {showConfirmPassword ? (
                   <FaEyeSlash
-                    onClick={() =>
-                      setShowConfirmPassword(!showConfirmPassword)
-                    }
+                    onClick={() => setShowConfirmPassword(!showConfirmPassword)}
                   />
                 ) : (
                   <FaEye
-                    onClick={() =>
-                      setShowConfirmPassword(!showConfirmPassword)
-                    }
+                    onClick={() => setShowConfirmPassword(!showConfirmPassword)}
                   />
                 )}
               </div>
 
               <div className="login-center-buttons">
-                <button type="button">Sign Up</button>
+                <button type="button" onClick={handleSignUp}>
+                  Sign Up
+                </button>
               </div>
             </form>
           </div>
 
           <p className="login-bottom-p">
             Already have an account? <Link to="/login">Log In</Link>
-         </p>
-
+          </p>
         </div>
       </div>
     </div>
