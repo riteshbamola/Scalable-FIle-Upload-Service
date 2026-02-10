@@ -22,6 +22,12 @@ const FileSchema = new mongoose.Schema(
       required: true
     },
 
+    status: {
+    type: String,
+    enum: ["pending", "uploaded", "failed"],
+    default: "pending"
+    },
+    
     storage: {
       provider: {
         type: String,

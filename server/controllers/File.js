@@ -1,6 +1,7 @@
 import mime from 'mime-types';
 import { PutObjectCommand, GetObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
+import { HeadObjectCommand } from "@aws-sdk/client-s3";
 import s3 from '../config/s3.js';
 import File from '../Models/File.js'
 const ALLOWED_MIME_TYPES = [
@@ -46,6 +47,7 @@ export const handleFileUpload = async (req,res)=>{
             expiresIn:60
         });
 
+         // Serious Bug - If file upload failed to s3 but metadata still be in DB
         await File.create({
             owner: userid,                 
             originalName: fileName,       
@@ -58,6 +60,12 @@ export const handleFileUpload = async (req,res)=>{
               key: key
             }
         });
+
+        //handled using a two-phase commit style 
+        // approach where metadata is created in a pending state and 
+        //finalized only after verifying the object exists in S3.
+
+
         res.status(200).json({
             uploadURL,
             key,
@@ -125,3 +133,39 @@ export const getAllFiles = async (req,res)=>{
         return res.status(500).json({message:err.message});
     }
 }
+
+
+
+export const confirmUpload = async (req, res) => {
+  const { fileId } = req.body;
+  const userId = req.user;
+  
+  const file = await File.findOne({
+    _id: fileId,
+    owner: userId,
+    status: "pending"
+  });
+
+  if (!file) {
+    return res.status(404).json({ message: "Invalid file" });
+  }
+
+  try {
+    await s3.send(
+      new HeadObjectCommand({
+        Bucket: file.storage.bucket,
+        Key: file.storage.key
+      })
+    );
+
+    file.status = "uploaded";
+    await file.save();
+
+    return res.json({ message: "Upload confirmed" });
+
+  } catch (err) {
+    return res.status(400).json({
+      message: "File not found in storage"
+    });
+  }
+};
