@@ -1,2 +1,8 @@
 Task pending for further 
 cron for deleteing pending files in db
+
+Pagination (backend + frontend)
+
+Search & sorting (backend + frontend)
+
+Basic UI wiring

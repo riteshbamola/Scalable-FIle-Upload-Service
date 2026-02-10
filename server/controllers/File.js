@@ -134,8 +134,6 @@ export const getAllFiles = async (req,res)=>{
     }
 }
 
-
-
 export const confirmUpload = async (req, res) => {
   const { fileId } = req.body;
   const userId = req.user;
