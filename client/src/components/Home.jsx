@@ -99,7 +99,7 @@ export default function Dashboard() {
     (safePage - 1) * FILES_PER_PAGE,
     safePage * FILES_PER_PAGE,
   );
-
+  //Download File
   const handleDownload = async (file) => {
     try {
       const fileId = file.id;

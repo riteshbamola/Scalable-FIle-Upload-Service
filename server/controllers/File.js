@@ -52,7 +52,7 @@ export const handleFileUpload = async (req, res) => {
     });
 
     // Serious Bug - If file upload failed to s3 but metadata still be in DB
-    await File.create({
+    const newFile = await File.create({
       owner: userid,
       originalName: fileName,
       mimeType,
@@ -73,6 +73,7 @@ export const handleFileUpload = async (req, res) => {
       uploadURL,
       key,
       mimeType,
+      fileId: newFile._id,
     });
   } catch (err) {
     return res.status(500).json({ message: err.message });
@@ -95,7 +96,7 @@ export const handleFileRetrieval = async (req, res) => {
     const command = new GetObjectCommand({
       Bucket: process.env.AWS_BUCKET_NAME,
       Key: key,
-      ResponseContentDisposition: "attachment",
+      ResponseContentDisposition: `attachment; filename="${newfile.originalName}"`,
     });
 
     const signedUrl = await getSignedUrl(s3, command, {
@@ -157,7 +158,7 @@ export const confirmUpload = async (req, res) => {
     file.status = "uploaded";
     await file.save();
 
-    return res.json({ message: "Upload confirmed" });
+    return res.status(200).json({ message: "Upload confirmed" });
   } catch (err) {
     return res.status(400).json({
       message: "File not found in storage",
@@ -169,7 +170,7 @@ export const fileDelete = async (req, res) => {
   try {
     const { fileId } = req.params;
     const userId = req.user;
-
+    console.log(userId);
     const file = await File.findOne({
       _id: fileId,
       owner: userId,
