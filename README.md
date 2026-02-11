@@ -28,33 +28,15 @@ credentials server-side while still supporting secure, time-limited uploads.
 - Auth: JWT (access + refresh)
 
 ## Architecture
-```mermaid
-flowchart LR
-  User[User] --> Browser[WebBrowser]
-  Browser --> Client[ReactClient]
+![Architecture](images/ARCHITECTURE.png)
 
-  subgraph frontend [Frontend]
-    Client
-  end
-
-  subgraph backend [Backend]
-    Api[Express API Server]
-    Auth[AuthMiddleware]
-  end
-
-  subgraph data [DataStores]
-    Mongo[MongoDB]
-    S3[AWS_S3]
-  end
-
-  Client <--> Api
-  Api --> Auth
-  Auth --> Api
-  Api <--> Mongo
-  Api -->|"PresignedURL"| Client
-  Client -->|"PUT/GETObject"| S3
-  Api <--> S3
-```
+## UI Previews
+- Login
+  ![Login](images/LOGIN.png)
+- Signup
+  ![Signup](images/SIGNUP.png)
+- Home
+  ![Home](images/HOME.png)
 
 ## Project Structure
 - `client/` React UI (Vite)
