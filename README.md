@@ -1,7 +1,18 @@
 # Scalable File Uploading System
 
-Full-stack file upload system with JWT-based authentication, S3 pre-signed uploads,
-and a React dashboard for managing user files.
+This project enables secure, scalable file uploads where the backend never parses
+or stores the file content. Instead, the backend issues pre-signed S3 URLs so the
+browser can upload directly to AWS S3. Only the backend holds AWS credentials; the
+client never sees them.
+
+The backend still remains the source of truth for access control and metadata:
+it validates file name/type/size, creates a pending metadata record in MongoDB,
+and finalizes that record only after the object is confirmed in S3. This keeps the
+system consistent even though file bytes bypass the API server.
+
+This design has two key benefits: it avoids large file payloads on the backend
+(better performance and cost) and reduces security exposure by keeping AWS
+credentials server-side while still supporting secure, time-limited uploads.
 
 ## Features
 - Email/password auth with access + refresh tokens
@@ -27,7 +38,7 @@ flowchart LR
   end
 
   subgraph backend [Backend]
-    Api[ExpressAPI]
+    Api[Express API Server]
     Auth[AuthMiddleware]
   end
 
