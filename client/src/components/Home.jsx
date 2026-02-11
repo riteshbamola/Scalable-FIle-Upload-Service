@@ -112,7 +112,6 @@ export default function Dashboard() {
 
   const handleDelete = async (id) => {
     try {
-      console.log("fileId", id);
       const resp = await api.delete(`/file/deletefile/${id}`);
       console.log(resp.data.message);
       setFiles((prev) => prev.filter((f) => f.id !== id));
