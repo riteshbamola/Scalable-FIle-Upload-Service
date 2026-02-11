@@ -18,12 +18,31 @@ and a React dashboard for managing user files.
 
 ## Architecture
 ```mermaid
-flowchart TD
-  User[User] --> Client[ReactClient]
-  Client --> Api[ExpressAPI]
-  Api --> Mongo[MongoDB]
-  Api --> S3[AWS_S3]
-  Client -->|"PUT presigned URL"| S3
+flowchart LR
+  User[User] --> Browser[WebBrowser]
+  Browser --> Client[ReactClient]
+
+  subgraph frontend [Frontend]
+    Client
+  end
+
+  subgraph backend [Backend]
+    Api[ExpressAPI]
+    Auth[AuthMiddleware]
+  end
+
+  subgraph data [DataStores]
+    Mongo[MongoDB]
+    S3[AWS_S3]
+  end
+
+  Client <--> Api
+  Api --> Auth
+  Auth --> Api
+  Api <--> Mongo
+  Api -->|"PresignedURL"| Client
+  Client -->|"PUT/GETObject"| S3
+  Api <--> S3
 ```
 
 ## Project Structure
