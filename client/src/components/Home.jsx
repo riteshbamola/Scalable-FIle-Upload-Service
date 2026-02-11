@@ -6,9 +6,18 @@ const FILES_PER_PAGE = 6;
 
 export default function Dashboard() {
   const [files, setFiles] = useState([]);
+  const [selectedFile, setSelectedFile] = useState(null);
+  const [error, setError] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const fileInputRef = useRef(null);
+
+  const handleFileChange = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setSelectedFile(file);
+    console.log("Selected:", file.name, file.size);
+  };
 
   const handleGetFiles = async () => {
     try {
@@ -34,6 +43,45 @@ export default function Dashboard() {
     handleGetFiles();
   }, []);
 
+  const handleFileUpload = async () => {
+    if (!selectedFile) {
+      alert("Please select a file first");
+      return;
+    }
+
+    const metaRes = await api.post("/file/request-upload", {
+      fileName: selectedFile.name,
+      fileSize: selectedFile.size,
+      fileType: selectedFile.type,
+    });
+
+    const uploadRes = await fetch(metaRes.data.uploadURL, {
+      method: "PUT",
+      headers: {
+        "Content-Type": selectedFile.type,
+      },
+      body: selectedFile,
+    });
+
+    if (uploadRes.status === 200) {
+      alert("File uploaded successfully");
+    } else {
+      alert("Failed to upload file");
+    }
+
+    const confirmRes = await api.post("/file/confirm-upload", {
+      fileId: metaRes.data.fileId,
+    });
+
+    if (confirmRes.status === 200) {
+      console.log("File confirmed successfully");
+    } else {
+      console.log("Failed to confirm file");
+    }
+
+    handleGetFiles();
+  };
+
   const filteredFiles = useMemo(() => {
     if (!searchQuery.trim()) return files;
 
@@ -52,31 +100,25 @@ export default function Dashboard() {
     safePage * FILES_PER_PAGE,
   );
 
-  /* ── Handlers ── */
-  const handleUpload = () => {
-    const input = fileInputRef.current;
-    if (!input || !input.files || !input.files.length) return;
-
-    const file = input.files[0];
-    const newFile = {
-      id: Date.now(),
-      name: file.name,
-      type: file.name.split(".").pop()?.toUpperCase() || "FILE",
-      size: formatBytes(file.size),
-      uploadDate: new Date().toISOString().split("T")[0],
-    };
-
-    setFiles((prev) => [newFile, ...prev]);
-    input.value = "";
-    setCurrentPage(1);
+  const handleDownload = async (file) => {
+    try {
+      const fileId = file.id;
+      const resp = await api.get(`/file/retrieve/${fileId}`);
+      window.open(resp.data.signedUrl, "_blank");
+    } catch (err) {
+      setError(err.message);
+    }
   };
 
-  const handleDownload = (file) => {
-    alert(`Downloading "${file.name}"…`);
-  };
-
-  const handleDelete = (id) => {
-    setFiles((prev) => prev.filter((f) => f.id !== id));
+  const handleDelete = async (id) => {
+    try {
+      console.log("fileId", id);
+      const resp = await api.delete(`/file/deletefile/${id}`);
+      console.log(resp.data.message);
+      setFiles((prev) => prev.filter((f) => f.id !== id));
+    } catch (err) {
+      setError(err.message);
+    }
   };
 
   const handleLogout = () => {
@@ -100,8 +142,13 @@ export default function Dashboard() {
 
       {/* Upload */}
       <section className={styles.uploadSection}>
-        <input ref={fileInputRef} type="file" className={styles.fileInput} />
-        <button className={styles.uploadBtn} onClick={handleUpload}>
+        <input
+          ref={fileInputRef}
+          type="file"
+          className={styles.fileInput}
+          onChange={handleFileChange}
+        />
+        <button className={styles.uploadBtn} onClick={handleFileUpload}>
           Upload
         </button>
       </section>
