@@ -136,3 +136,17 @@ export const rotateToken = async (req, res) => {
     return res.status(500).json({ message: "Internal server error" });
   }
 };
+
+export const handleLogout = async (req, res) => {
+  try {
+    res.clearCookie("refreshToken", {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "strict",
+    });
+
+    res.json({ message: "Logged out successfully" });
+  } catch (err) {
+    return res.status(500).json({ message: err.message });
+  }
+};

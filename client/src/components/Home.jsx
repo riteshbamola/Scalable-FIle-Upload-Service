@@ -1,10 +1,13 @@
 import React, { useState, useMemo, useRef, useEffect } from "react";
 import styles from "./Dashboard.module.css";
 import api from "../api/axios";
-
+import { setAuthToken } from "../api/authToken";
+import { useAuth } from "../context/AuthContext";
 const FILES_PER_PAGE = 6;
 
 export default function Dashboard() {
+  const { setAccessToken } = useAuth();
+
   const [files, setFiles] = useState([]);
   const [selectedFile, setSelectedFile] = useState(null);
   const [error, setError] = useState("");
@@ -120,8 +123,16 @@ export default function Dashboard() {
     }
   };
 
-  const handleLogout = () => {
-    alert("Logged out");
+  const handleLogout = async () => {
+    try {
+      await api.post("/auth/logout");
+      setAccessToken(null);
+      setAuthToken(null);
+      console.log("Logout successful");
+      window.location.href = "/login";
+    } catch (err) {
+      console.error("Logout failed:", err);
+    }
   };
 
   const handleSearchChange = (e) => {
