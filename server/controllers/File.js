@@ -1,8 +1,15 @@
+import fs from "fs";
+import path from "path";
 import mime from "mime-types";
+
 import {
   PutObjectCommand,
   GetObjectCommand,
   DeleteObjectCommand,
+  CompleteMultipartUploadCommand,
+  UploadPartCommand,
+  CreateMultipartUploadCommand,
+  AbortMultipartUploadCommand,
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { HeadObjectCommand } from "@aws-sdk/client-s3";
@@ -204,5 +211,107 @@ export const fileDelete = async (req, res) => {
     }
   } catch (err) {
     return res.status(500).json({ message: err.message });
+  }
+};
+
+// haandle multipart
+
+export const startUpload = async (req, res) => {
+  try {
+    const userid = req.user;
+    const { fileName, fileSize } = req.body;
+
+    const mimeType = mime.lookup(fileName);
+
+    if (!mimeType || !ALLOWED_MIME_TYPES.includes(mimeType)) {
+      return res.status(400).json({ message: "Invalid file type" });
+    }
+
+    const extension = mime.extension(mimeType);
+    const key = `uploads/${userid}/${Date.now()}.${extension}`;
+
+    const command = new CreateMultipartUploadCommand({
+      Bucket: process.env.BUCKET,
+      Key: key,
+      ContentType: mimeType,
+    });
+
+    const response = await s3.send(command);
+
+    res.json({
+      uploadId: response.UploadId,
+      key: fileName,
+    });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ message: "Failed to start upload" });
+  }
+};
+
+export const getMultiPartURL = async (req, res) => {
+  try {
+    const { key, uploadId, partNumber } = req.body;
+
+    const command = new UploadPartCommand({
+      Bucket: process.env.BUCKET,
+      Key: key,
+      uploadId: uploadId,
+      PartNumber: partNumber,
+    });
+
+    const response = await s3.send(command);
+    const url = await getSignedUrl(s3, command, { expiresIn: 60 });
+    res.json({
+      url: url,
+    });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ message: "Failed to get multipart URL" });
+  }
+};
+
+export const completeUpload = async (req, res) => {
+  try {
+    const { key, uploadId, parts } = req.body;
+
+    const command = new CompleteMultipartUploadCommand({
+      Bucket: process.env.BUCKET,
+      Key: key,
+      UploadId: uploadId,
+      MultipartUpload: {
+        Parts: parts.map((part, index) => ({
+          ETag: part.etag,
+          PartNumber: index + 1,
+        })),
+      },
+    });
+
+    const response = await s3.send(command);
+    res.json({
+      location: response.Location,
+    });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ message: "Failed to complete upload" });
+  }
+};
+
+export const cancelUpload = async (req, res) => {
+  try {
+    const { key, uploadId } = req.body;
+
+    const command = new AbortMultipartUploadCommand({
+      Bucket: process.env.BUCKET,
+      Key: key,
+      UploadId: uploadId,
+    });
+
+    await s3.send(command);
+    res.json({
+      message: "Upload canceled",
+    });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ message: "Failed to cancel upload" });
   }
 };
