@@ -11,6 +11,7 @@ export default function Dashboard() {
   const [files, setFiles] = useState([]);
   const [selectedFile, setSelectedFile] = useState(null);
   const [error, setError] = useState("");
+  const [uploadedChunks, setUploadedChunks] = useState([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const fileInputRef = useRef(null);
@@ -52,37 +53,63 @@ export default function Dashboard() {
       return;
     }
 
-    const metaRes = await api.post("/file/request-upload", {
-      fileName: selectedFile.name,
-      fileSize: selectedFile.size,
-      fileType: selectedFile.type,
-    });
+    try {
+      // 1️⃣ Start multipart upload
+      const metaRes = await api.post("/file/request-multipart", {
+        fileName: selectedFile.name,
+        fileSize: selectedFile.size,
+      });
 
-    const uploadRes = await fetch(metaRes.data.uploadURL, {
-      method: "PUT",
-      headers: {
-        "Content-Type": selectedFile.type,
-      },
-      body: selectedFile,
-    });
+      const { uploadId, key } = metaRes.data;
 
-    if (uploadRes.status === 200) {
-      alert("File uploaded successfully");
-    } else {
-      alert("Failed to upload file");
+      const chunkSize = 5 * 1024 * 1024; // 5MB (S3 minimum)
+      const parts = [];
+      let partNumber = 1;
+
+      for (let start = 0; start < selectedFile.size; start += chunkSize) {
+        const chunk = selectedFile.slice(start, start + chunkSize);
+
+        // 2️⃣ Get signed URL for this part
+        const urlRes = await api.post("/file/upload-part", {
+          key,
+          uploadId,
+          partNumber,
+        });
+
+        const signedUrl = urlRes.data.url;
+
+        // 3️⃣ Upload chunk directly to S3
+        const uploadRes = await fetch(signedUrl, {
+          method: "PUT",
+          body: chunk,
+        });
+
+        if (!uploadRes.ok) {
+          throw new Error("Failed to upload part " + partNumber);
+        }
+
+        const etag = uploadRes.headers.get("ETag");
+
+        parts.push({
+          ETag: etag.replace(/"/g, ""),
+          PartNumber: partNumber,
+        });
+
+        partNumber++;
+      }
+
+      // 4️⃣ Complete upload
+      await api.post("/file/complete-multipart", {
+        key,
+        uploadId,
+        parts,
+      });
+
+      alert("File uploaded successfully!");
+    } catch (error) {
+      console.error(error);
+      alert("Upload failed");
     }
-
-    const confirmRes = await api.post("/file/confirm-upload", {
-      fileId: metaRes.data.fileId,
-    });
-
-    if (confirmRes.status === 200) {
-      console.log("File confirmed successfully");
-    } else {
-      console.log("Failed to confirm file");
-    }
-
-    handleGetFiles();
   };
 
   const filteredFiles = useMemo(() => {
