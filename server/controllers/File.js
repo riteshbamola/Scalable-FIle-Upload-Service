@@ -287,6 +287,7 @@ export const completeUpload = async (req, res) => {
     });
 
     const response = await s3.send(command);
+
     res.json({
       location: response.Location,
     });
