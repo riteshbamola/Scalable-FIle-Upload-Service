@@ -11,9 +11,12 @@ import {
   CreateMultipartUploadCommand,
   AbortMultipartUploadCommand,
 } from "@aws-sdk/client-s3";
+
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { HeadObjectCommand } from "@aws-sdk/client-s3";
+
 import s3 from "../config/s3.js";
+
 import File from "../Models/File.js";
 const ALLOWED_MIME_TYPES = [
   "image/jpeg",
@@ -46,13 +49,22 @@ export const handleFileUpload = async (req, res) => {
       return res.status(400).json({ message: "FileSize Should be under 5mb" });
     }
 
+
+    
     const extension = mime.extension(mimeType);
     const key = `uploads/${userid}/${Date.now()}.${extension}`;
+
+   
+
+
     const command = new PutObjectCommand({
       Bucket: process.env.AWS_BUCKET_NAME,
       Key: key,
       ContentType: mimeType,
     });
+
+   
+
 
     const uploadURL = await getSignedUrl(s3, command, {
       expiresIn: 60,
@@ -71,6 +83,8 @@ export const handleFileUpload = async (req, res) => {
         key: key,
       },
     });
+
+    console.log(newFile);
 
     // handled using a two-phase commit style
     // approach where metadata is created in a pending state and

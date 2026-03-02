@@ -3,6 +3,7 @@ import styles from "./Dashboard.module.css";
 import api from "../api/axios";
 import { setAuthToken } from "../api/authToken";
 import { useAuth } from "../context/AuthContext";
+
 const FILES_PER_PAGE = 6;
 
 export default function Dashboard() {
@@ -11,18 +12,13 @@ export default function Dashboard() {
   const [files, setFiles] = useState([]);
   const [selectedFile, setSelectedFile] = useState(null);
   const [error, setError] = useState("");
-  const [uploadedChunks, setUploadedChunks] = useState([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const fileInputRef = useRef(null);
 
-  const handleFileChange = (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setSelectedFile(file);
-    console.log("Selected:", file.name, file.size);
-  };
-
+  /* ───────────────────────────── */
+  /* Fetch Files */
+  /* ───────────────────────────── */
   const handleGetFiles = async () => {
     try {
       const res = await api.get("/file/allfiles");
@@ -30,7 +26,7 @@ export default function Dashboard() {
       const normalizedFiles = (res.data.allFiles || []).map((file) => ({
         id: file._id,
         name: file.originalName,
-        type: file.mimeType.split("/")[1]?.toUpperCase() || "FILE",
+        type: file.mimeType?.split("/")[1]?.toUpperCase() || "FILE",
         size: formatBytes(file.size),
         uploadDate: file.createdAt.split("T")[0],
         storage: file.storage,
@@ -47,14 +43,52 @@ export default function Dashboard() {
     handleGetFiles();
   }, []);
 
-  const handleFileUpload = async () => {
-    if (!selectedFile) {
-      alert("Please select a file first");
-      return;
-    }
+  /* ───────────────────────────── */
+  /* File Selection */
+  /* ───────────────────────────── */
+  const handleFileChange = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setSelectedFile(file);
+  };
 
+  /* ───────────────────────────── */
+  /* Normal Upload (<5MB) */
+  /* ───────────────────────────── */
+  const normalFileUpload = async () => {
     try {
-      // 1️⃣ Start multipart upload
+      const response = await api.post("/file/request-upload", {
+        fileName: selectedFile.name,
+        fileSize: selectedFile.size,
+      });
+
+      const uploadURL = response.data.uploadURL;
+
+      const uploadRes = await fetch(uploadURL, {
+        method: "PUT",
+        headers: {
+          "Content-Type": selectedFile.type,
+        },
+        body: selectedFile,
+      });
+
+      if (!uploadRes.ok) {
+        throw new Error("File Upload Failed");
+      }
+
+      alert("File uploaded successfully!");
+      resetAfterUpload();
+    } catch (error) {
+      console.error(error);
+      alert("Upload failed");
+    }
+  };
+
+  /* ───────────────────────────── */
+  /* Multipart Upload (>=5MB) */
+  /* ───────────────────────────── */
+  const multipartUpload = async () => {
+    try {
       const metaRes = await api.post("/file/request-multipart", {
         fileName: selectedFile.name,
         fileSize: selectedFile.size,
@@ -62,14 +96,13 @@ export default function Dashboard() {
 
       const { uploadId, key } = metaRes.data;
 
-      const chunkSize = 5 * 1024 * 1024; // 5MB (S3 minimum)
+      const chunkSize = 5 * 1024 * 1024; // 5MB
       const parts = [];
       let partNumber = 1;
 
       for (let start = 0; start < selectedFile.size; start += chunkSize) {
         const chunk = selectedFile.slice(start, start + chunkSize);
 
-        // 2️⃣ Get signed URL for this part
         const urlRes = await api.post("/file/upload-part", {
           key,
           uploadId,
@@ -78,7 +111,6 @@ export default function Dashboard() {
 
         const signedUrl = urlRes.data.url;
 
-        // 3️⃣ Upload chunk directly to S3
         const uploadRes = await fetch(signedUrl, {
           method: "PUT",
           body: chunk,
@@ -88,7 +120,13 @@ export default function Dashboard() {
           throw new Error("Failed to upload part " + partNumber);
         }
 
-        const etag = uploadRes.headers.get("ETag");
+        const etag =
+          uploadRes.headers.get("ETag") ||
+          uploadRes.headers.get("etag");
+
+        if (!etag) {
+          throw new Error("Missing ETag for part " + partNumber);
+        }
 
         parts.push({
           ETag: etag.replace(/"/g, ""),
@@ -98,7 +136,6 @@ export default function Dashboard() {
         partNumber++;
       }
 
-      // 4️⃣ Complete upload
       await api.post("/file/complete-multipart", {
         key,
         uploadId,
@@ -106,70 +143,107 @@ export default function Dashboard() {
       });
 
       alert("File uploaded successfully!");
+      resetAfterUpload();
     } catch (error) {
       console.error(error);
-      alert("Upload failed");
+      alert("Multipart upload failed");
     }
   };
 
+  /* ───────────────────────────── */
+  /* Upload Handler */
+  /* ───────────────────────────── */
+  const handleFileUpload = async () => {
+    if (!selectedFile) {
+      alert("Please select a file first");
+      return;
+    }
+
+    const fileLimit = 5 * 1024 * 1024;
+    const fileSize = selectedFile.size;
+
+    if (fileSize < fileLimit) {
+      return normalFileUpload();
+    } else {
+      return multipartUpload();
+    }
+  };
+
+  /* ───────────────────────────── */
+  /* Reset UI After Upload */
+  /* ───────────────────────────── */
+  const resetAfterUpload = () => {
+    setSelectedFile(null);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+    handleGetFiles();
+  };
+
+  /* ───────────────────────────── */
+  /* Search + Pagination */
+  /* ───────────────────────────── */
   const filteredFiles = useMemo(() => {
     if (!searchQuery.trim()) return files;
-
     const q = searchQuery.toLowerCase();
     return files.filter((f) => f.name.toLowerCase().includes(q));
   }, [files, searchQuery]);
 
-  /* ── Pagination ── */
   const totalPages = Math.max(
     1,
-    Math.ceil(filteredFiles.length / FILES_PER_PAGE),
+    Math.ceil(filteredFiles.length / FILES_PER_PAGE)
   );
+
   const safePage = Math.min(currentPage, totalPages);
+
   const paginatedFiles = filteredFiles.slice(
     (safePage - 1) * FILES_PER_PAGE,
-    safePage * FILES_PER_PAGE,
+    safePage * FILES_PER_PAGE
   );
-  //Download File
+
+  /* ───────────────────────────── */
+  /* Download */
+  /* ───────────────────────────── */
   const handleDownload = async (file) => {
     try {
-      const fileId = file.id;
-      const resp = await api.get(`/file/retrieve/${fileId}`);
+      const resp = await api.get(`/file/retrieve/${file.id}`);
       window.open(resp.data.signedUrl, "_blank");
     } catch (err) {
       setError(err.message);
     }
   };
 
+  /* ───────────────────────────── */
+  /* Delete */
+  /* ───────────────────────────── */
   const handleDelete = async (id) => {
     try {
-      const resp = await api.delete(`/file/deletefile/${id}`);
-      console.log(resp.data.message);
+      await api.delete(`/file/deletefile/${id}`);
       setFiles((prev) => prev.filter((f) => f.id !== id));
     } catch (err) {
       setError(err.message);
     }
   };
 
+  /* ───────────────────────────── */
+  /* Logout */
+  /* ───────────────────────────── */
   const handleLogout = async () => {
     try {
       await api.post("/auth/logout");
       setAccessToken(null);
       setAuthToken(null);
-      console.log("Logout successful");
       window.location.href = "/login";
     } catch (err) {
       console.error("Logout failed:", err);
     }
   };
 
-  const handleSearchChange = (e) => {
-    setSearchQuery(e.target.value);
-    setCurrentPage(1);
-  };
-
+  /* ───────────────────────────── */
+  /* UI */
+  /* ───────────────────────────── */
   return (
     <div className={styles.container}>
-      {/* Header */}
       <header className={styles.header}>
         <h1 className={styles.title}>Your Files</h1>
         <button className={styles.logoutBtn} onClick={handleLogout}>
@@ -177,7 +251,6 @@ export default function Dashboard() {
         </button>
       </header>
 
-      {/* Upload */}
       <section className={styles.uploadSection}>
         <input
           ref={fileInputRef}
@@ -190,18 +263,19 @@ export default function Dashboard() {
         </button>
       </section>
 
-      {/* Search */}
       <div className={styles.searchWrapper}>
         <input
           type="text"
           className={styles.searchInput}
           placeholder="Search files by name…"
           value={searchQuery}
-          onChange={handleSearchChange}
+          onChange={(e) => {
+            setSearchQuery(e.target.value);
+            setCurrentPage(1);
+          }}
         />
       </div>
 
-      {/* File cards */}
       {paginatedFiles.length > 0 ? (
         <div className={styles.fileGrid}>
           {paginatedFiles.map((file) => (
@@ -237,7 +311,6 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* Pagination */}
       {filteredFiles.length > FILES_PER_PAGE && (
         <nav className={styles.pagination}>
           <button
@@ -262,7 +335,9 @@ export default function Dashboard() {
 
           <button
             className={styles.pageBtn}
-            onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+            onClick={() =>
+              setCurrentPage((p) => Math.min(totalPages, p + 1))
+            }
             disabled={safePage >= totalPages}
           >
             Next
@@ -273,11 +348,13 @@ export default function Dashboard() {
   );
 }
 
-/* ── Helper ── */
+/* ───────────────────────────── */
 function formatBytes(bytes) {
   if (bytes === 0) return "0 B";
   const k = 1024;
   const sizes = ["B", "KB", "MB", "GB"];
   const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + " " + sizes[i];
+  return (
+    parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + " " + sizes[i]
+  );
 }

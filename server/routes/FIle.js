@@ -5,6 +5,10 @@ import {
   getAllFiles,
   confirmUpload,
   fileDelete,
+  startUpload,
+  getMultiPartURL,
+  completeUpload,
+  cancelUpload,
 } from "../controllers/File.js";
 import { AuthHandler } from "../middlewares/Auth.js";
 const router = express.Router();
