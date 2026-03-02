@@ -87,68 +87,88 @@ export default function Dashboard() {
   /* ───────────────────────────── */
   /* Multipart Upload (>=5MB) */
   /* ───────────────────────────── */
-  const multipartUpload = async () => {
-    try {
-      const metaRes = await api.post("/file/request-multipart", {
-        fileName: selectedFile.name,
-        fileSize: selectedFile.size,
-      });
+const multipartUpload = async () => {
+  let uploadId = null;
+  let key = null;
 
-      const { uploadId, key } = metaRes.data;
+  try {
+    // 1️⃣ Start multipart
+    const metaRes = await api.post("/file/request-multipart", {
+      fileName: selectedFile.name,
+      fileSize: selectedFile.size,
+    });
 
-      const chunkSize = 5 * 1024 * 1024; // 5MB
-      const parts = [];
-      let partNumber = 1;
+    uploadId = metaRes.data.uploadId;
+    key = metaRes.data.key;
 
-      for (let start = 0; start < selectedFile.size; start += chunkSize) {
-        const chunk = selectedFile.slice(start, start + chunkSize);
+    const chunkSize = 5 * 1024 * 1024;
+    const parts = [];
+    let partNumber = 1;
 
-        const urlRes = await api.post("/file/upload-part", {
-          key,
-          uploadId,
-          partNumber,
-        });
+    for (let start = 0; start < selectedFile.size; start += chunkSize) {
+      const chunk = selectedFile.slice(start, start + chunkSize);
 
-        const signedUrl = urlRes.data.url;
-
-        const uploadRes = await fetch(signedUrl, {
-          method: "PUT",
-          body: chunk,
-        });
-
-        if (!uploadRes.ok) {
-          throw new Error("Failed to upload part " + partNumber);
-        }
-
-        const etag =
-          uploadRes.headers.get("ETag") ||
-          uploadRes.headers.get("etag");
-
-        if (!etag) {
-          throw new Error("Missing ETag for part " + partNumber);
-        }
-
-        parts.push({
-          ETag: etag.replace(/"/g, ""),
-          PartNumber: partNumber,
-        });
-
-        partNumber++;
-      }
-
-      await api.post("/file/complete-multipart", {
+      const urlRes = await api.post("/file/upload-part", {
         key,
         uploadId,
-        parts,
+        partNumber,
       });
 
-      alert("File uploaded successfully!");
-      resetAfterUpload();
-    } catch (error) {
-      console.error(error);
-      alert("Multipart upload failed");
+      const signedUrl = urlRes.data.url;
+
+      const uploadRes = await fetch(signedUrl, {
+        method: "PUT",
+        body: chunk,
+      });
+
+      if (!uploadRes.ok) {
+        throw new Error("Failed to upload part " + partNumber);
+      }
+
+      const etag =
+        uploadRes.headers.get("ETag") ||
+        uploadRes.headers.get("etag");
+
+      if (!etag) {
+        throw new Error("Missing ETag for part " + partNumber);
+      }
+
+      parts.push({
+        ETag: etag.replace(/"/g, ""),
+        PartNumber: partNumber,
+      });
+
+      partNumber++;
     }
-  };
+
+    console.log("Sending Complete req to backend with parts: ".parts);
+    await api.post("/file/complete-multipart", {
+      key,
+      uploadId,
+      parts,
+    });
+
+    alert("File uploaded successfully!");
+    resetAfterUpload();
+
+  } catch (error) {
+    console.error("Multipart error:", error);
+
+    if (uploadId && key) {
+      try {
+        await api.post("/file/cancel-multipart", {
+          key,
+          uploadId,
+        });
+        console.log("Multipart upload aborted successfully");
+      } catch (abortError) {
+        console.error("Failed to abort upload:", abortError);
+      }
+    }
+
+    alert("Upload failed and was cancelled.");
+  }
+};
 
   /* ───────────────────────────── */
   /* Upload Handler */

@@ -50,11 +50,11 @@ export const handleFileUpload = async (req, res) => {
     }
 
 
-    
+
     const extension = mime.extension(mimeType);
     const key = `uploads/${userid}/${Date.now()}.${extension}`;
 
-   
+
 
 
     const command = new PutObjectCommand({
@@ -63,7 +63,7 @@ export const handleFileUpload = async (req, res) => {
       ContentType: mimeType,
     });
 
-   
+
 
 
     const uploadURL = await getSignedUrl(s3, command, {
@@ -233,8 +233,11 @@ export const fileDelete = async (req, res) => {
 export const startUpload = async (req, res) => {
   try {
     const userid = req.user;
-    const { fileName, fileSize } = req.body;
 
+
+    console.log(req.body);
+    const { fileName, fileSize } = req.body;
+    
     const mimeType = mime.lookup(fileName);
 
     if (!mimeType || !ALLOWED_MIME_TYPES.includes(mimeType)) {
@@ -245,7 +248,7 @@ export const startUpload = async (req, res) => {
     const key = `uploads/${userid}/${Date.now()}.${extension}`;
 
     const command = new CreateMultipartUploadCommand({
-      Bucket: process.env.BUCKET,
+      Bucket: process.env.AWS_BUCKET_NAME,
       Key: key,
       ContentType: mimeType,
     });
@@ -254,8 +257,9 @@ export const startUpload = async (req, res) => {
 
     res.json({
       uploadId: response.UploadId,
-      key: fileName,
+      key: key,
     });
+
   } catch (error) {
     console.error(error);
     return res.status(500).json({ message: "Failed to start upload" });
@@ -267,13 +271,14 @@ export const getMultiPartURL = async (req, res) => {
     const { key, uploadId, partNumber } = req.body;
 
     const command = new UploadPartCommand({
-      Bucket: process.env.BUCKET,
+      Bucket: process.env.AWS_BUCKET_NAME,
       Key: key,
-      uploadId: uploadId,
+      UploadId: uploadId,
       PartNumber: partNumber,
+      Body: undefined, // IMPORTANT: do not include body while signing
     });
 
-    const response = await s3.send(command);
+    // const response = await s3.send(command);
     const url = await getSignedUrl(s3, command, { expiresIn: 60 });
     res.json({
       url: url,
@@ -287,27 +292,25 @@ export const getMultiPartURL = async (req, res) => {
 export const completeUpload = async (req, res) => {
   try {
     const { key, uploadId, parts } = req.body;
-
+    console.log(parts);
     const command = new CompleteMultipartUploadCommand({
-      Bucket: process.env.BUCKET,
+      Bucket: process.env.AWS_BUCKET_NAME,
       Key: key,
       UploadId: uploadId,
       MultipartUpload: {
-        Parts: parts.map((part, index) => ({
-          ETag: part.etag,
-          PartNumber: index + 1,
+        Parts: parts.map((part) => ({
+          ETag: part.ETag,
+          PartNumber: part.PartNumber,
         })),
       },
     });
 
     const response = await s3.send(command);
 
-    res.json({
-      location: response.Location,
-    });
+    res.json({ location: response.Location });
   } catch (error) {
     console.error(error);
-    return res.status(500).json({ message: "Failed to complete upload" });
+    res.status(500).json({ message: "Failed to complete upload" });
   }
 };
 
@@ -316,7 +319,7 @@ export const cancelUpload = async (req, res) => {
     const { key, uploadId } = req.body;
 
     const command = new AbortMultipartUploadCommand({
-      Bucket: process.env.BUCKET,
+      Bucket: process.env.AWS_BUCKET_NAME,
       Key: key,
       UploadId: uploadId,
     });
