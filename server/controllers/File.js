@@ -84,7 +84,6 @@ export const handleFileUpload = async (req, res) => {
       },
     });
 
-    console.log(newFile);
 
     // handled using a two-phase commit style
     // approach where metadata is created in a pending state and
@@ -237,7 +236,7 @@ export const startUpload = async (req, res) => {
 
     console.log(req.body);
     const { fileName, fileSize } = req.body;
-    
+
     const mimeType = mime.lookup(fileName);
 
     if (!mimeType || !ALLOWED_MIME_TYPES.includes(mimeType)) {
@@ -254,6 +253,19 @@ export const startUpload = async (req, res) => {
     });
 
     const response = await s3.send(command);
+
+    await File.create({
+      owner: userid,
+      originalName: fileName,
+      mimeType,
+      size: fileSize,
+
+      storage: {
+        provider: "s3",
+        bucket: process.env.AWS_BUCKET_NAME,
+        key: key,
+      },
+    });
 
     res.json({
       uploadId: response.UploadId,
@@ -308,6 +320,12 @@ export const completeUpload = async (req, res) => {
     const response = await s3.send(command);
 
     res.json({ location: response.Location });
+
+
+
+
+
+
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: "Failed to complete upload" });
